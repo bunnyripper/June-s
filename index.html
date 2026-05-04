@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tim's Birthday Mission</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+
+:root{
+  --cyan: #00f5ff;
+  --green: #00ff88;
+  --amber: #ffaa00;
+  --red: #ff3355;
+  --dim: rgba(0,245,255,0.15);
+  --panel: rgba(0,10,20,0.95);
+}
+
+body{
+  background:#000;
+  overflow:hidden;
+  width:100vw;
+  height:100vh;
+  font-family:'Share Tech Mono', monospace;
+  color:var(--cyan);
+  cursor:crosshair;
+}
+
+/* ─── CANVAS BEHIND EVERYTHING ─── */
+#bgCanvas{
+  position:absolute;
+  inset:0;
+  z-index:0;
+}
+
+/* ─── FLASH ─── */
+#flash{
+  position:absolute;
+  inset:0;
+  background:white;
+  opacity:0;
+  z-index:50;
+  pointer-events:none;
+  transition:opacity 0.4s;
+}
+
+/* ─── GALAXY MESSAGE OVERLAY ─── */
+#galaxyOverlay{
+  position:absolute;
+  inset:0;
+  z-index:40;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity 2s;
+  text-align:center;
+  padding:20px;
+}
+
+.msg-line{
+  font-family:'Orbitron', sans-serif;
+  font-size:clamp(14px,2.5vw,22px);
+  color:#e0cfff;
+  margin:8px 0;
+  opacity:0;
+  transform:translateY(20px);
+  transition:opacity 1s, transform 1s;
+  text-shadow:0 0 20px #a066ff, 0 0 40px #6633ff;
+}
+
+.msg-line.big{
+  font-size:clamp(22px,4vw,42px);
+  color:#ffd700;
+  text-shadow:0 0 30px #ffaa00, 0 0 60px #ff6600;
+  margin-top:20px;
+}
+
+.msg-line.visible{ opacity:1; transform:translateY(0); }
+
+/* ─── COCKPIT WRAPPER ─── */
+#cockpit{
+  position:absolute;
+  inset:0;
+  z-index:10;
+  pointer-events:none;
+  transition:opacity 2s;
+}
+
+/* ─── WINDSCREEN FRAME ─── */
+/* Wide arch frame — like sitting behind a wide spacecraft windshield */
+#windscreen-frame{
+  position:absolute;
+  inset:0;
+}
+
+/* Top arch SVG overlay */
+#top-arch{
+  position:absolute;
+  top:0; left:0;
+  width:100%; height:40%;
+  pointer-events:none;
+}
+
+/* Left panel */
+#panel-left{
+  position:absolute;
+  left:0; top:0;
+  width:18%;
+  height:calc(100% - 130px);
+  background:linear-gradient(to right, var(--panel), rgba(0,10,20,0.7));
+  border-right:1px solid var(--dim);
+  padding:15px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  pointer-events:all;
+}
+
+/* Right panel */
+#panel-right{
+  position:absolute;
+  right:0; top:0;
+  width:18%;
+  height:calc(100% - 130px);
+  background:linear-gradient(to left, var(--panel), rgba(0,10,20,0.7));
+  border-left:1px solid var(--dim);
+  padding:15px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  pointer-events:all;
+}
+
+/* Bottom dashboard */
+#dashboard{
+  position:absolute;
+  bottom:0; left:0;
+  width:100%;
+  height:130px;
+  background:linear-gradient(to top, #000a14 60%, rgba(0,10,20,0.8));
+  border-top:2px solid var(--dim);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 5%;
+  pointer-events:all;
+  gap:10px;
+}
+
+/* Cockpit edge glow */
+#cockpit::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  box-shadow:
+    inset 0 0 60px rgba(0,245,255,0.08),
+    inset 0 0 2px rgba(0,245,255,0.3);
+  pointer-events:none;
+}
+
+/* ─── HUD ELEMENTS ─── */
+.hud-label{
+  font-size:9px;
+  color:rgba(0,245,255,0.5);
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:2px;
+}
+
+.hud-value{
+  font-size:13px;
+  color:var(--cyan);
+  text-shadow:0 0 8px var(--cyan);
+}
+
+.hud-block{ margin-bottom:4px; }
+
+/* Bar gauges */
+.gauge-bar{
+  width:100%;
+  height:6px;
+  background:rgba(255,255,255,0.1);
+  border-radius:3px;
+  margin-top:4px;
+  overflow:hidden;
+}
+
+.gauge-fill{
+  height:100%;
+  border-radius:3px;
+  transition:width 1s;
+}
+
+.gauge-fill.oxygen{ background:var(--cyan); width:100%; }
+.gauge-fill.shield{ background:var(--green); width:85%; }
+.gauge-fill.fuel{ background:var(--amber); width:72%; }
+
+/* Speed display */
+.speed-display{
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(14px,2vw,22px);
+  color:var(--green);
+  text-shadow:0 0 15px var(--green);
+  text-align:center;
+}
+
+.speed-unit{
+  font-size:9px;
+  color:rgba(0,255,136,0.5);
+  letter-spacing:3px;
+}
+
+/* Destination display */
+.dest-display{
+  text-align:center;
+  border:1px solid var(--dim);
+  padding:6px 12px;
+  border-radius:4px;
+  background:rgba(0,245,255,0.03);
+}
+
+.dest-label{ font-size:8px; color:rgba(0,245,255,0.4); letter-spacing:2px; }
+.dest-value{ font-size:10px; color:var(--amber); text-shadow:0 0 8px var(--amber); }
+
+/* Radar */
+.radar-wrap{
+  position:relative;
+  width:70px; height:70px;
+  flex-shrink:0;
+}
+
+.radar-circle{
+  width:100%; height:100%;
+  border:1px solid rgba(0,255,136,0.3);
+  border-radius:50%;
+  position:relative;
+  overflow:hidden;
+}
+
+.radar-inner{
+  position:absolute;
+  inset:25%;
+  border:1px solid rgba(0,255,136,0.2);
+  border-radius:50%;
+}
+
+.radar-sweep{
+  position:absolute;
+  width:50%; height:2px;
+  background:linear-gradient(to right, transparent, var(--green));
+  top:50%; left:50%;
+  transform-origin:left center;
+  animation:sweep 3s linear infinite;
+}
+
+.radar-dot{
+  position:absolute;
+  width:4px; height:4px;
+  background:var(--green);
+  border-radius:50%;
+  box-shadow:0 0 6px var(--green);
+}
+
+@keyframes sweep{ to{ transform:rotate(360deg); } }
+
+/* Blinking lights row */
+.lights-row{
+  display:flex;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.blink-light{
+  width:8px; height:8px;
+  border-radius:50%;
+  animation:blink var(--speed,1.2s) infinite;
+}
+
+@keyframes blink{ 50%{ opacity:0.15; } }
+
+.blink-light.r{ background:var(--red); box-shadow:0 0 6px var(--red); --speed:0.8s; }
+.blink-light.g{ background:var(--green); box-shadow:0 0 6px var(--green); --speed:1.4s; }
+.blink-light.a{ background:var(--amber); box-shadow:0 0 6px var(--amber); --speed:2s; }
+.blink-light.c{ background:var(--cyan); box-shadow:0 0 6px var(--cyan); --speed:0.6s; }
+
+/* Divider lines on panels */
+.panel-divider{
+  width:100%;
+  height:1px;
+  background:linear-gradient(to right, transparent, var(--dim), transparent);
+  margin:4px 0;
+}
+
+/* Seat silhouettes at bottom corners */
+.seat{
+  position:absolute;
+  bottom:130px;
+  width:80px; height:60px;
+  background:linear-gradient(to top, #050d15, transparent);
+  border-top:1px solid rgba(0,245,255,0.1);
+}
+.seat.left{ left:18%; border-top-right-radius:30px; }
+.seat.right{ right:18%; border-top-left-radius:30px; }
+
+/* Steering column */
+.steering{
+  position:absolute;
+  bottom:130px;
+  left:50%;
+  transform:translateX(-50%);
+  width:40px;
+  height:50px;
+  border:1px solid rgba(0,245,255,0.15);
+  border-bottom:none;
+  border-radius:20px 20px 0 0;
+  background:linear-gradient(to top, #050d15, transparent);
+}
+
+/* ─── BUTTONS ─── */
+.ctrl-btn{
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(9px,1.2vw,13px);
+  padding:10px 16px;
+  border:1px solid var(--cyan);
+  background:rgba(0,245,255,0.05);
+  color:var(--cyan);
+  border-radius:6px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:2px;
+  box-shadow:0 0 10px rgba(0,245,255,0.2), inset 0 0 10px rgba(0,245,255,0.05);
+  transition:all 0.2s;
+  pointer-events:all;
+  white-space:nowrap;
+}
+
+.ctrl-btn:hover:not(:disabled){
+  background:rgba(0,245,255,0.15);
+  box-shadow:0 0 20px rgba(0,245,255,0.4), inset 0 0 15px rgba(0,245,255,0.1);
+}
+
+.ctrl-btn:active:not(:disabled){ transform:scale(0.97); }
+
+.ctrl-btn.go-btn{
+  border-color:var(--green);
+  color:var(--green);
+  box-shadow:0 0 10px rgba(0,255,136,0.2);
+}
+
+.ctrl-btn.go-btn:hover{
+  background:rgba(0,255,136,0.15);
+  box-shadow:0 0 25px rgba(0,255,136,0.5);
+}
+
+.ctrl-btn.hyper-btn{
+  border-color:var(--amber);
+  color:var(--amber);
+  box-shadow:0 0 10px rgba(255,170,0,0.2);
+  opacity:0.3;
+  cursor:not-allowed;
+}
+
+.ctrl-btn.hyper-btn.unlocked{
+  opacity:1;
+  cursor:pointer;
+  animation:hyperPulse 1s infinite;
+}
+
+@keyframes hyperPulse{
+  50%{ box-shadow:0 0 30px rgba(255,170,0,0.7), inset 0 0 15px rgba(255,170,0,0.1); }
+}
+
+.ctrl-btn.hyper-btn.unlocked:hover{
+  background:rgba(255,170,0,0.15);
+}
+
+/* ─── SHAKE ─── */
+.shake-mild{ animation:shakeMild 0.15s infinite; }
+.shake-intense{ animation:shakeIntense 0.08s infinite; }
+
+@keyframes shakeMild{
+  0%{ transform:translate(0,0); }
+  25%{ transform:translate(1px,1px); }
+  50%{ transform:translate(-1px,0); }
+  75%{ transform:translate(0,-1px); }
+  100%{ transform:translate(1px,-1px); }
+}
+
+@keyframes shakeIntense{
+  0%{ transform:translate(0,0); }
+  25%{ transform:translate(3px,2px); }
+  50%{ transform:translate(-2px,3px); }
+  75%{ transform:translate(2px,-2px); }
+  100%{ transform:translate(-3px,1px); }
+}
+
+/* Glass reflection */
+#glass-reflect{
+  position:absolute;
+  top:5%; left:20%; right:20%; height:30%;
+  background:linear-gradient(135deg,
+    rgba(255,255,255,0.03) 0%,
+    rgba(255,255,255,0.06) 30%,
+    transparent 60%
+  );
+  pointer-events:none;
+  border-radius:0 0 50% 50%;
+  z-index:11;
+}
+
+/* Scanline effect */
+#scanlines{
+  position:absolute;
+  inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events:none;
+  z-index:12;
+}
+
+/* Status text */
+#status-text{
+  position:absolute;
+  top:15px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:11px;
+  color:rgba(0,245,255,0.6);
+  letter-spacing:3px;
+  text-transform:uppercase;
+  z-index:15;
+  pointer-events:none;
+  text-shadow:0 0 10px var(--cyan);
+  transition:opacity 0.5s;
+}
+
+/* Mobile adjustments */
+@media(max-width:600px){
+  #panel-left, #panel-right{ width:14%; padding:8px 5px; }
+  .ctrl-btn{ padding:8px 10px; font-size:9px; }
+  .radar-wrap{ width:50px; height:50px; }
+  #dashboard{ height:110px; }
+  .seat{ bottom:110px; }
+  .steering{ bottom:110px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<div id="flash"></div>
+<div id="scanlines"></div>
+<div id="glass-reflect"></div>
+<div id="status-text">SYSTEMS NOMINAL — AWAITING LAUNCH</div>
+
+<!-- Galaxy message overlay -->
+<div id="galaxyOverlay">
+  <div class="msg-line">Somewhere out there...</div>
+  <div class="msg-line">among a billion stars and endless galaxies...</div>
+  <div class="msg-line">the universe decided to create you.</div>
+  <div class="msg-line">And honestly? Great decision.</div>
+  <div class="msg-line">You make this corner of space a little brighter.</div>
+  <div class="msg-line">Keep being exactly who you are.</div>
+  <div class="msg-line big">🚀 Happy Birthday Tim 🚀</div>
+</div>
+
+<!-- COCKPIT -->
+<div id="cockpit">
+
+  <!-- Left Panel -->
+  <div id="panel-left">
+    <div class="hud-label">Systems</div>
+    <div class="lights-row">
+      <div class="blink-light r"></div>
+      <div class="blink-light g"></div>
+      <div class="blink-light a"></div>
+      <div class="blink-light c"></div>
+      <div class="blink-light g"></div>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="hud-block">
+      <div class="hud-label">Oxygen</div>
+      <div class="gauge-bar"><div class="gauge-fill oxygen" id="oxyBar"></div></div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-label">Shields</div>
+      <div class="gauge-bar"><div class="gauge-fill shield" id="shieldBar"></div></div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-label">Fuel</div>
+      <div class="gauge-bar"><div class="gauge-fill fuel" id="fuelBar"></div></div>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="hud-block">
+      <div class="hud-label">Altitude</div>
+      <div class="hud-value" id="altValue">384,400 km</div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-label">Heading</div>
+      <div class="hud-value">NGC-7293</div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="panel-right">
+    <div class="hud-label">Navigation</div>
+    <div class="radar-wrap">
+      <div class="radar-circle">
+        <div class="radar-inner"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-dot" style="top:30%;left:60%"></div>
+        <div class="radar-dot" style="top:65%;left:25%"></div>
+        <div class="radar-dot" style="top:45%;left:75%"></div>
+      </div>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="hud-block">
+      <div class="hud-label">Speed</div>
+      <div class="speed-display" id="speedVal">0</div>
+      <div class="speed-unit">km/s</div>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="dest-display">
+      <div class="dest-label">Destination</div>
+      <div class="dest-value">TIM'S BIRTHDAY 🎂</div>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="hud-block">
+      <div class="hud-label">ETA</div>
+      <div class="hud-value" id="etaVal">CALCULATING...</div>
+    </div>
+  </div>
+
+  <!-- Seat silhouettes -->
+  <div class="seat left"></div>
+  <div class="seat right"></div>
+  <div class="steering"></div>
+
+  <!-- Bottom Dashboard -->
+  <div id="dashboard">
+    <div style="display:flex;flex-direction:column;gap:6px;align-items:center;">
+      <div class="hud-label">Comms</div>
+      <button class="ctrl-btn" onclick="toggleMusic()">🎵 MUSIC</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div class="hud-label">Mission Status</div>
+      <div class="hud-value" id="missionStatus" style="font-size:11px;text-align:center;">STANDBY</div>
+      <div class="lights-row" style="justify-content:center;">
+        <div class="blink-light g"></div>
+        <div class="blink-light a"></div>
+        <div class="blink-light g"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:center;">
+      <button class="ctrl-btn go-btn" id="goBtn" onclick="startJourney()">▶ LAUNCH</button>
+      <button class="ctrl-btn hyper-btn" id="hyperBtn" onclick="goHyper()" disabled>⚡ HYPERSPEED</button>
+    </div>
+  </div>
+
+</div>
+
+<audio id="music" src="music.mp3" loop></audio>
+
+<script>
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let stars = [];
+let galaxyParticles = [];
+let stage = 0; // 0=drift, 1=go, 2=hyper, 3=arrival, 4=approach, 5=message
+let speedFactor = 0;
+let targetSpeed = 0.3;
+let galaxyScale = 0;
+let galaxyVisible = false;
+let galaxyAngle = 0;
+let animFrame;
+
+function resize(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+resize();
+window.addEventListener('resize', ()=>{ resize(); initStars(); });
+
+// ─── STARS ───
+function initStars(){
+  stars = [];
+  for(let i=0;i<200;i++){
+    stars.push({
+      x: Math.random()*W,
+      y: Math.random()*H,
+      z: Math.random()*W,
+      pz: 0,
+      size: Math.random()*2+0.5,
+      brightness: Math.random()*0.7+0.3
+    });
+  }
+}
+
+initStars();
+
+// ─── GALAXY PARTICLES ───
+function initGalaxy(){
+  galaxyParticles = [];
+  const arms = 3;
+  for(let a=0;a<arms;a++){
+    for(let i=0;i<300;i++){
+      const t = (i/300)*Math.PI*4;
+      const r = t * 40;
+      const spread = Math.random()*20 - 10;
+      const angle = t + (a * Math.PI*2/arms);
+      galaxyParticles.push({
+        r: r + spread,
+        angle: angle,
+        size: Math.random()*2+0.5,
+        color: a===0 ? '#c084fc' : a===1 ? '#818cf8' : '#67e8f9',
+        brightness: Math.random()*0.8+0.2,
+        drift: Math.random()*0.001
+      });
+    }
+  }
+  // Core glow particles
+  for(let i=0;i<100;i++){
+    const r = Math.random()*25;
+    const angle = Math.random()*Math.PI*2;
+    galaxyParticles.push({
+      r, angle,
+      size: Math.random()*3+1,
+      color: '#fff',
+      brightness: Math.random()*0.9+0.1,
+      drift: 0,
+      core: true
+    });
+  }
+}
+
+initGalaxy();
+
+// ─── DRAW ───
+function draw(){
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0,0,W,H);
+
+  if(stage < 3){
+    drawStarfield();
+  }
+
+  if(stage >= 3){
+    // Black background for galaxy scene
+    ctx.fillStyle = 'rgba(0,0,8,0.15)';
+    ctx.fillRect(0,0,W,H);
+    drawStarfield();
+    if(galaxyVisible) drawGalaxy();
+  }
+
+  animFrame = requestAnimationFrame(draw);
+}
+
+function drawStarfield(){
+  const cx = W/2, cy = H/2;
+
+  stars.forEach(s => {
+    s.pz = s.z;
+    s.z -= speedFactor * 8;
+
+    if(s.z <= 0) s.z = W;
+    if(s.z >= W) s.z = W;
+
+    const sx = (s.x - cx) * (W/s.z) + cx;
+    const sy = (s.y - cy) * (W/s.z) + cy;
+    const psx = (s.x - cx) * (W/s.pz) + cx;
+    const psy = (s.y - cy) * (W/s.pz) + cy;
+
+    const size = Math.max(0.1, (1 - s.z/W) * 3);
+    const bright = (1 - s.z/W) * s.brightness;
+
+    if(stage >= 2){
+      // Streak mode
+      ctx.beginPath();
+      ctx.moveTo(psx, psy);
+      ctx.lineTo(sx, sy);
+      const alpha = Math.min(1, bright * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = size * 0.8;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(255,255,255,${bright})`;
+      ctx.fill();
+    }
+
+    if(sx < 0 || sx > W || sy < 0 || sy > H){
+      s.x = Math.random()*W;
+      s.y = Math.random()*H;
+      s.z = W;
+    }
+  });
+}
+
+function drawGalaxy(){
+  const cx = W/2, cy = H * 0.45;
+  const scale = galaxyScale;
+
+  galaxyAngle += 0.002;
+
+  // Outer glow
+  const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,scale*120);
+  grd.addColorStop(0,'rgba(200,150,255,0.3)');
+  grd.addColorStop(0.3,'rgba(100,80,200,0.15)');
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx,cy,scale*120,0,Math.PI*2);
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // Draw galaxy particles
+  galaxyParticles.forEach(p => {
+    p.angle += p.drift;
+    const px = cx + Math.cos(p.angle + galaxyAngle) * p.r * scale * 0.8;
+    const py = cy + Math.sin(p.angle + galaxyAngle) * p.r * scale * 0.3;
+
+    const size = p.core ? p.size * scale * 0.4 : p.size * scale * 0.25;
+    if(size < 0.1) return;
+
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(0.1, size), 0, Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.brightness * Math.min(1, scale);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Bright core
+  const core = ctx.createRadialGradient(cx,cy,0,cx,cy,scale*15);
+  core.addColorStop(0,'rgba(255,255,255,0.9)');
+  core.addColorStop(0.3,'rgba(220,180,255,0.6)');
+  core.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx,cy,scale*15,0,Math.PI*2);
+  ctx.fillStyle = core;
+  ctx.fill();
+}
+
+draw();
+
+// ─── SPEED & ETA ───
+let speedNum = 0;
+let etaSeconds = 99;
+
+function updateHUD(){
+  if(stage === 0){ speedNum = 0; }
+  else if(stage === 1){ speedNum += (29.8 - speedNum)*0.02; }
+  else if(stage === 2){ speedNum += (299792 - speedNum)*0.05; }
+  else if(stage >= 3){ speedNum *= 0.92; }
+
+  document.getElementById('speedVal').textContent =
+    speedNum > 1000
+      ? (speedNum/1000).toFixed(1)+'k'
+      : Math.round(speedNum);
+
+  if(stage === 1 || stage === 2){
+    etaSeconds = Math.max(0, etaSeconds - (stage===2?5:0.5));
+    document.getElementById('etaVal').textContent =
+      etaSeconds > 0 ? etaSeconds.toFixed(0)+' SEC' : 'ARRIVED';
+  }
+
+  // Deplete gauges during journey
+  if(stage >= 1){
+    const oxy = document.getElementById('oxyBar');
+    const shield = document.getElementById('shieldBar');
+    const fuel = document.getElementById('fuelBar');
+    const w = parseFloat(oxy.style.width||'100');
+    if(w > 60) oxy.style.width = (w - 0.02)+'%';
+    const sw = parseFloat(shield.style.width||'85');
+    if(sw > 70) shield.style.width = (sw - 0.01)+'%';
+    const fw = parseFloat(fuel.style.width||'72');
+    if(fw > 20) fuel.style.width = (fw - 0.05)+'%';
+  }
+
+  // Alt counter
+  if(stage >= 1){
+    const alt = Math.round(384400 + speedNum * 1000);
+    document.getElementById('altValue').textContent =
+      alt.toLocaleString()+' km';
+  }
+
+  setTimeout(updateHUD, 100);
+}
+updateHUD();
+
+// ─── MUSIC ───
+function toggleMusic(){
+  const m = document.getElementById('music');
+  if(m.paused){ m.play(); }
+  else{ m.pause(); }
+}
+
+// ─── STAGE 1: GO ───
+function startJourney(){
+  if(stage !== 0) return;
+  stage = 1;
+  targetSpeed = 15;
+  speedFactor = 3;
+
+  document.getElementById('goBtn').disabled = true;
+  document.getElementById('goBtn').style.opacity = '0.4';
+  document.getElementById('missionStatus').textContent = 'ENGINES IGNITED';
+  document.getElementById('status-text').textContent = 'ACCELERATING — HYPERSPEED READY';
+  setStatus('ACCELERATING — HYPERSPEED READY');
+
+  document.body.classList.add('shake-mild');
+
+  // Unlock hyperspeed after 2s
+  setTimeout(()=>{
+    const hb = document.getElementById('hyperBtn');
+    hb.disabled = false;
+    hb.classList.add('unlocked');
+    document.getElementById('missionStatus').textContent = 'HYPERSPEED READY';
+  }, 2000);
+}
+
+// ─── STAGE 2: HYPERSPEED ───
+function goHyper(){
+  if(stage !== 1) return;
+  stage = 2;
+  speedFactor = 80;
+
+  document.getElementById('hyperBtn').disabled = true;
+  document.getElementById('missionStatus').textContent = 'HYPERSPEED ACTIVE';
+  setStatus('HYPERSPEED — BRACE FOR IMPACT');
+
+  document.body.classList.remove('shake-mild');
+  document.body.classList.add('shake-intense');
+
+  // Flash and arrival after 3s
+  setTimeout(()=>{
+    document.getElementById('flash').style.opacity = 1;
+  }, 3000);
+
+  setTimeout(()=>{
+    document.getElementById('flash').style.opacity = 0;
+    document.body.classList.remove('shake-intense');
+    stage = 3;
+    speedFactor = 1;
+    galaxyVisible = true;
+    galaxyScale = 0.1;
+    document.getElementById('missionStatus').textContent = 'DESTINATION REACHED';
+    setStatus('DESTINATION REACHED — APPROACHING');
+  }, 4000);
+
+  // Stage 4: Approach — galaxy grows
+  setTimeout(()=>{
+    stage = 4;
+    speedFactor = 0.2;
+    let scaleInterval = setInterval(()=>{
+      galaxyScale += 0.015;
+      if(galaxyScale >= 2.5){
+        clearInterval(scaleInterval);
+        stage = 5;
+        showMessage();
+      }
+    }, 50);
+  }, 5000);
+}
+
+// ─── STAGE 5: MESSAGE ───
+function showMessage(){
+  setStatus('');
+  document.getElementById('status-text').style.opacity = '0';
+  speedFactor = 0;
+
+  // Fade cockpit out
+  setTimeout(()=>{
+    document.getElementById('cockpit').style.opacity = '0';
+    document.getElementById('cockpit').style.pointerEvents = 'none';
+  }, 500);
+
+  // Show galaxy overlay
+  setTimeout(()=>{
+    const overlay = document.getElementById('galaxyOverlay');
+    overlay.style.opacity = '1';
+    overlay.style.pointerEvents = 'all';
+
+    const lines = document.querySelectorAll('.msg-line');
+    lines.forEach((line, i)=>{
+      setTimeout(()=>{ line.classList.add('visible'); }, i * 1200);
+    });
+  }, 1500);
+}
+
+function setStatus(text){
+  document.getElementById('status-text').textContent = text;
+}
+
+// Ambient speed in drift mode
+setInterval(()=>{
+  if(stage === 0) speedFactor = 0.3;
+}, 100);
+</script>
+</body>
+</html>
